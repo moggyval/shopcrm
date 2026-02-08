@@ -181,9 +181,18 @@ label{font-size:12px;color:var(--muted);display:block;margin:8px 0 6px}
   color:#fff;
   font-weight:700;
 }
+.btn.small{
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
 .btn.secondary{
   background: rgba(255,255,255,.06);
   color: var(--text);
+}
+.btn.good{
+  background: linear-gradient(180deg, rgba(46,160,67,.95), rgba(46,160,67,.5));
+  border-color: rgba(46,160,67,.45);
 }
 .btn.danger{
   background: rgba(248,81,73,.12);
@@ -242,6 +251,37 @@ label{font-size:12px;color:var(--muted);display:block;margin:8px 0 6px}
   background: rgba(255,255,255,.02);
   margin-bottom: 12px;
 }
+
+.share-hero{
+  display:flex;
+  gap:18px;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+}
+.share-meta{display:flex;flex-direction:column;gap:8px}
+.share-total{
+  min-width: 220px;
+  text-align:right;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,.02);
+}
+.share-total-breakdown{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.share-jobs{display:flex;flex-direction:column;gap:14px}
+.share-job-card{padding: 16px}
+.share-job-top{
+  display:flex;
+  gap:14px;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  margin-bottom: 12px;
+}
+.share-job-title{font-size:18px;font-weight:700}
+.share-job-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.share-items{margin-top:4px}
 
 .jobhead{
   display:flex;
