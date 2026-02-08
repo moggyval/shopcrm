@@ -120,15 +120,29 @@ def create_app():
             return -abs(amt)
         return amt
 
+    def active_items_for_totals(items):
+        job_ids = list({i.job_id for i in items if i.job_id})
+        job_status = {}
+        if job_ids:
+            job_status = {
+                j.id: j.status
+                for j in Job.query.filter(Job.id.in_(job_ids)).all()
+            }
+        return [
+            i for i in items
+            if (not i.job_id) or job_status.get(i.job_id) != "declined"
+        ]
+
     def recalc_document_totals(doc: Document):
         if doc.status in ("locked", "paid") or doc.locked_at is not None:
             return
 
         items = LineItem.query.filter_by(document_id=doc.id).all()
-        subtotal = sum((line_amount(i) for i in items), start=Decimal("0.00"))
+        active_items = active_items_for_totals(items)
+        subtotal = sum((line_amount(i) for i in active_items), start=Decimal("0.00"))
 
         taxable = sum(
-            (line_amount(i) for i in items if i.taxable and i.item_type != "discount"),
+            (line_amount(i) for i in active_items if i.taxable and i.item_type != "discount"),
             start=Decimal("0.00"),
         )
         tax = (taxable * TAX_RATE).quantize(Decimal("0.01"))
@@ -486,14 +500,37 @@ def create_app():
     @app.get("/calendar")
     @login_required
     def calendar_view():
-        return render_template("calendar.html")
+        ros = RepairOrder.query.filter(RepairOrder.deleted_at.is_(None)).order_by(RepairOrder.opened_at.desc()).limit(200).all()
+        cust_ids = list({r.customer_id for r in ros})
+        veh_ids = list({r.vehicle_id for r in ros})
+        customers = Customer.query.filter(Customer.id.in_(cust_ids)).all() if cust_ids else []
+        vehicles = Vehicle.query.filter(Vehicle.id.in_(veh_ids)).all() if veh_ids else []
+        cust_map = {c.id: c for c in customers}
+        veh_map = {v.id: v for v in vehicles}
+        ro_pick = []
+        for ro in ros:
+            cust = cust_map.get(ro.customer_id)
+            veh = veh_map.get(ro.vehicle_id)
+            vehicle_text = ""
+            if veh:
+                parts = [veh.year, veh.make, veh.model, veh.engine]
+                vehicle_text = " ".join([str(p) for p in parts if p])
+            ro_pick.append({
+                "id": ro.id,
+                "ro_number": ro.ro_number,
+                "customer_name": cust.name if cust else "",
+                "vehicle_text": vehicle_text,
+            })
+        return render_template("calendar.html", ro_pick=ro_pick)
 
-    @app.get("/api/appointments")
+    @app.post("/calendar", endpoint="calendar_create")
     @login_required
-    def api_appointments():
-        # FullCalendar expects start/end ISO
-        start = request.args.get("start")
-        end = request.args.get("end")
+    def calendar_create():
+        create_appointment_from_form()
+        flash("Appointment saved.")
+        return redirect(url_for("calendar_view"))
+
+    def calendar_events(start=None, end=None):
         q = Appointment.query
         if start:
             try:
@@ -513,7 +550,6 @@ def create_app():
             ro = RepairOrder.query.get(a.ro_id)
             title = a.title
             if ro:
-                # Helpful label: RO# + customer + vehicle
                 cust = Customer.query.get(ro.customer_id)
                 veh = Vehicle.query.get(ro.vehicle_id)
                 parts = [f"RO #{ro.ro_number}"]
@@ -536,15 +572,42 @@ def create_app():
                     "notes": a.notes,
                 }
             })
-        return jsonify(events)
+        return events
 
-    @app.post("/api/appointments")
+    @app.get("/api/appointments")
     @login_required
-    def api_appointments_create():
+    def api_appointments():
+        start = request.args.get("start")
+        end = request.args.get("end")
+        return jsonify(calendar_events(start, end))
+
+    @app.get("/api/calendar/events")
+    @login_required
+    def api_calendar_events():
+        start = request.args.get("start")
+        end = request.args.get("end")
+        return jsonify(calendar_events(start, end))
+
+    @app.get("/api/calendar/event/<string:appt_id>")
+    @login_required
+    def api_calendar_event(appt_id):
+        appt = Appointment.query.get_or_404(appt_id)
+        return jsonify({
+            "id": appt.id,
+            "title": appt.title,
+            "ro_id": appt.ro_id,
+            "start_at": appt.start_at.isoformat(),
+            "end_at": appt.end_at.isoformat(),
+            "status": appt.status,
+            "notes": appt.notes,
+        })
+
+    def create_appointment_from_form():
         ro_id = (request.form.get("ro_id") or "").strip()
         title = (request.form.get("title") or "").strip() or "Appointment"
         start_at = (request.form.get("start_at") or "").strip()
         end_at = (request.form.get("end_at") or "").strip()
+        status = (request.form.get("status") or "").strip() or "scheduled"
         notes = (request.form.get("notes") or "").strip() or None
 
         if not ro_id:
@@ -558,22 +621,31 @@ def create_app():
             abort(400)
 
         appt = Appointment(
-            id=gen_uuid(),
             ro_id=ro_id,
             title=title,
             start_at=sdt,
             end_at=edt,
-            status="scheduled",
+            status=status,
             notes=notes,
             created_at=datetime.utcnow(),
         )
         db.session.add(appt)
         db.session.commit()
+        return appt
+
+    @app.post("/api/appointments")
+    @login_required
+    def api_appointments_create():
+        appt = create_appointment_from_form()
         return {"ok": True, "id": appt.id}
 
-    @app.post("/api/appointments/<string:appt_id>/update")
+    @app.post("/api/calendar/appointments")
     @login_required
-    def api_appointments_update(appt_id):
+    def api_calendar_appointments_create():
+        appt = create_appointment_from_form()
+        return {"ok": True, "id": appt.id}
+
+    def update_appointment_from_form(appt_id):
         appt = Appointment.query.get_or_404(appt_id)
         title = (request.form.get("title") or "").strip()
         start_at = (request.form.get("start_at") or "").strip()
@@ -591,15 +663,35 @@ def create_app():
         appt.notes = notes
         db.session.add(appt)
         db.session.commit()
+        return appt
+
+    @app.post("/api/appointments/<string:appt_id>/update")
+    @login_required
+    def api_appointments_update(appt_id):
+        update_appointment_from_form(appt_id)
+        return {"ok": True}
+
+    @app.post("/api/calendar/appointments/<string:appt_id>/update")
+    @login_required
+    def api_calendar_appointments_update(appt_id):
+        update_appointment_from_form(appt_id)
+        return {"ok": True}
+
+    def delete_appointment(appt_id):
+        appt = Appointment.query.get_or_404(appt_id)
+        db.session.delete(appt)
+        db.session.commit()
         return {"ok": True}
 
     @app.post("/api/appointments/<string:appt_id>/delete")
     @login_required
     def api_appointments_delete(appt_id):
-        appt = Appointment.query.get_or_404(appt_id)
-        db.session.delete(appt)
-        db.session.commit()
-        return {"ok": True}
+        return delete_appointment(appt_id)
+
+    @app.post("/api/calendar/appointments/<string:appt_id>/delete")
+    @login_required
+    def api_calendar_appointments_delete(appt_id):
+        return delete_appointment(appt_id)
 
     # ---------- RO list ----------
     @app.get("/ros")
@@ -1263,6 +1355,23 @@ def create_app():
         recalc_document_totals(doc)
         db.session.commit()
 
+        def group_items(items):
+            grouped = {}
+            unassigned = []
+            for li in items:
+                if li.job_id:
+                    grouped.setdefault(li.job_id, []).append(li)
+                else:
+                    unassigned.append(li)
+            return grouped, unassigned
+
+        items_by_job, unassigned_items = group_items(items)
+        job_ids = list(items_by_job.keys())
+        jobs = []
+        if job_ids:
+            jobs = Job.query.filter(Job.id.in_(job_ids)).order_by(Job.sort_order.asc(), Job.created_at.asc()).all()
+        job_totals_map = job_totals(doc.id)
+
         pdf_url = url_for("share_doc_pdf", token=token)
         return render_template(
             "share_doc.html",
@@ -1271,8 +1380,40 @@ def create_app():
             customer=cust,
             vehicle=veh,
             items=items,
+            items_by_job=items_by_job,
+            unassigned_items=unassigned_items,
+            jobs=jobs,
+            job_totals=job_totals_map,
             pdf_url=pdf_url,
         )
+
+    @app.post("/share/<string:token>/jobs/<string:job_id>/status")
+    def share_job_status(token, job_id):
+        doc = Document.query.filter_by(share_token=token).first_or_404()
+        if doc.doc_type != "estimate":
+            abort(400)
+
+        job = Job.query.get_or_404(job_id)
+        if job.ro_id != doc.ro_id:
+            abort(404)
+
+        new_status = (request.form.get("status") or "").strip()
+        if new_status not in ("approved", "declined"):
+            abort(400)
+
+        old = job.status
+        job.status = new_status
+        db.session.add(job)
+        log_event(doc.ro_id, "job_status", f"{job.title}:{old}", f"{job.title}:{new_status}")
+
+        if new_status == "approved":
+            ro = RepairOrder.query.get_or_404(job.ro_id)
+            if ro.status in ("open", "estimate_sent"):
+                ro.status = "work_in_progress"
+                db.session.add(ro)
+
+        db.session.commit()
+        return redirect(url_for("share_view", token=token))
 
     @app.get("/share/<string:token>/document.pdf")
     def share_doc_pdf(token):

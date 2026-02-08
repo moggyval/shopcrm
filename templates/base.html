@@ -20,6 +20,7 @@
     <nav class="nav">
       <a class="{{ 'on' if active=='dashboard' else '' }}" href="{{ url_for('dashboard') }}">Dashboard</a>
       <a class="{{ 'on' if active=='ros' else '' }}" href="{{ url_for('ro_list') }}">ROs</a>
+      <a class="{{ 'on' if active=='calendar' else '' }}" href="{{ url_for('calendar_view') }}">Calendar</a>
       <a class="btn" href="{{ url_for('ro_new') }}">+ New RO</a>
       <a class="{{ 'on' if active=='customers' else '' }}" href="{{ url_for('customers') }}">Customers</a>
       <a class="{{ 'on' if active=='matrices' else '' }}" href="{{ url_for('matrices_settings') }}">Matrices</a>
