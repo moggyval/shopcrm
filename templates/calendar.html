@@ -18,7 +18,7 @@
       <button class="btn tiny" type="button" onclick="closeAppt()">X</button>
     </div>
 
-    <form method="post" id="apptForm" action="{{ url_for('appointment_create') }}">
+    <form method="post" id="apptForm">
       <input type="hidden" name="appt_id" id="appt_id">
       <div class="grid2">
         <div>
@@ -63,10 +63,9 @@
       </div>
     </form>
 
-    <form method="post" action="{{ url_for('appointment_delete') }}" style="margin-top:10px;">
-      <input type="hidden" name="appt_id" id="del_appt_id">
-      <button class="btn danger" type="submit">Delete Appointment</button>
-    </form>
+    <div style="margin-top:10px;">
+      <button class="btn danger" type="button" id="deleteAppt">Delete Appointment</button>
+    </div>
   </div>
 </div>
 
@@ -78,7 +77,6 @@ const modal = document.getElementById("apptModal");
 function closeAppt(){ modal.classList.remove("show"); }
 function openAppt(data){
   document.getElementById("appt_id").value = data.id || "";
-  document.getElementById("del_appt_id").value = data.id || "";
   if(data.ro_id) document.getElementById("ro_id").value = data.ro_id;
   document.getElementById("title").value = data.title || "";
   document.getElementById("start_at").value = data.start_at || "";
@@ -88,8 +86,14 @@ function openAppt(data){
   modal.classList.add("show");
 }
 
+function formatForInput(date){
+  if(!date) return "";
+  const d = new Date(date);
+  return d.toISOString().slice(0,16);
+}
+
 async function getEvents(info){
-  const r = await fetch(`/api/calendar/events?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`);
+  const r = await fetch(`/api/appointments?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`);
   return await r.json();
 }
 
@@ -107,14 +111,54 @@ document.addEventListener('DOMContentLoaded', async function() {
       const end = info.dateStr + "T10:00";
       openAppt({start_at:start, end_at:end, status:"scheduled"});
     },
-    eventClick: async (info)=>{
-      const id = info.event.id;
-      const r = await fetch(`/api/calendar/event/${encodeURIComponent(id)}`);
-      const data = await r.json();
+    eventClick: (info)=>{
+      fetch(`/api/calendar/event/${encodeURIComponent(info.event.id)}`)
+        .then((r)=>r.json())
+        .then((data)=>openAppt({
+          id: data.id,
+          title: data.title,
+          ro_id: data.ro_id,
+          status: data.status,
+          notes: data.notes,
+          start_at: formatForInput(data.start_at),
+          end_at: formatForInput(data.end_at),
+        }));
+      const data = {
+        id: info.event.id,
+        title: info.event.title,
+        ro_id: info.event.extendedProps.ro_id,
+        status: info.event.extendedProps.status,
+        notes: info.event.extendedProps.notes,
+        start_at: formatForInput(info.event.start),
+        end_at: formatForInput(info.event.end),
+      };
       openAppt(data);
     }
   });
   cal.render();
+  document.getElementById("apptForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const apptId = document.getElementById("appt_id").value;
+    const form = new FormData(e.target);
+    if(apptId){
+      await fetch(`/api/calendar/appointments/${encodeURIComponent(apptId)}/update`, {method:"POST", body:form});
+    }else{
+      await fetch("/api/calendar/appointments", {method:"POST", body:form});
+      await fetch(`/api/appointments/${encodeURIComponent(apptId)}/update`, {method:"POST", body:form});
+    }else{
+      await fetch("/api/appointments", {method:"POST", body:form});
+    }
+    closeAppt();
+    cal.refetchEvents();
+  });
+  document.getElementById("deleteAppt").addEventListener("click", async ()=>{
+    const apptId = document.getElementById("appt_id").value;
+    if(!apptId) return;
+    await fetch(`/api/calendar/appointments/${encodeURIComponent(apptId)}/delete`, {method:"POST"});
+    await fetch(`/api/appointments/${encodeURIComponent(apptId)}/delete`, {method:"POST"});
+    closeAppt();
+    cal.refetchEvents();
+  });
 });
 modal.addEventListener("click", (e)=>{ if(e.target===modal) closeAppt(); });
 </script>
