@@ -1263,6 +1263,23 @@ def create_app():
         recalc_document_totals(doc)
         db.session.commit()
 
+        def group_items(items):
+            grouped = {}
+            unassigned = []
+            for li in items:
+                if li.job_id:
+                    grouped.setdefault(li.job_id, []).append(li)
+                else:
+                    unassigned.append(li)
+            return grouped, unassigned
+
+        items_by_job, unassigned_items = group_items(items)
+        job_ids = list(items_by_job.keys())
+        jobs = []
+        if job_ids:
+            jobs = Job.query.filter(Job.id.in_(job_ids)).order_by(Job.sort_order.asc(), Job.created_at.asc()).all()
+        job_totals_map = job_totals(doc.id)
+
         pdf_url = url_for("share_doc_pdf", token=token)
         return render_template(
             "share_doc.html",
@@ -1271,8 +1288,40 @@ def create_app():
             customer=cust,
             vehicle=veh,
             items=items,
+            items_by_job=items_by_job,
+            unassigned_items=unassigned_items,
+            jobs=jobs,
+            job_totals=job_totals_map,
             pdf_url=pdf_url,
         )
+
+    @app.post("/share/<string:token>/jobs/<string:job_id>/status")
+    def share_job_status(token, job_id):
+        doc = Document.query.filter_by(share_token=token).first_or_404()
+        if doc.doc_type != "estimate":
+            abort(400)
+
+        job = Job.query.get_or_404(job_id)
+        if job.ro_id != doc.ro_id:
+            abort(404)
+
+        new_status = (request.form.get("status") or "").strip()
+        if new_status not in ("approved", "declined"):
+            abort(400)
+
+        old = job.status
+        job.status = new_status
+        db.session.add(job)
+        log_event(doc.ro_id, "job_status", f"{job.title}:{old}", f"{job.title}:{new_status}")
+
+        if new_status == "approved":
+            ro = RepairOrder.query.get_or_404(job.ro_id)
+            if ro.status in ("open", "estimate_sent"):
+                ro.status = "work_in_progress"
+                db.session.add(ro)
+
+        db.session.commit()
+        return redirect(url_for("share_view", token=token))
 
     @app.get("/share/<string:token>/document.pdf")
     def share_doc_pdf(token):

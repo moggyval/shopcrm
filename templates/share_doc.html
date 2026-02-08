@@ -16,40 +16,129 @@
   </div>
 
   <div class="container">
-    <div class="card">
-      <div class="row space">
-        <div>
-          <h2>{{ doc.doc_type|capitalize }} (v{{ doc.version }})</h2>
-          <div class="muted">Status: {{ doc.status }}</div>
-          <div class="muted">RO #{{ ro.ro_number }} — {{ customer.name }} — {{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }} {{ vehicle.engine }}</div>
-        </div>
-        <div class="right">
-          <div class="big">${{ doc.total }}</div>
-          <div class="muted">Total</div>
-        </div>
+    <div class="card share-hero">
+      <div class="share-meta">
+        <div class="pill">Status: {{ doc.status }}</div>
+        <h2>{{ doc.doc_type|capitalize }} (v{{ doc.version }})</h2>
+        <div class="muted">RO #{{ ro.ro_number }} — {{ customer.name }}</div>
+        <div class="muted">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }} {{ vehicle.engine }}</div>
       </div>
-
-      <table class="table" style="margin-top:14px;">
-        <tr><th>Description</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Amount</th></tr>
-        {% for it in items %}
-          <tr>
-            <td>
-              <div>{{ it.description }}</div>
-              <div class="muted">{{ it.item_type }}{% if it.labor_hours %} • {{ it.labor_hours }}h{% endif %}</div>
-            </td>
-            <td class="right">{{ it.qty }}</td>
-            <td class="right">${{ it.unit_price }}</td>
-            <td class="right">${{ (it.qty * it.unit_price) | round(2) }}</td>
-          </tr>
-        {% endfor %}
-      </table>
-
-      <div class="totals">
-        <div><span class="muted">Subtotal</span><div class="big">${{ doc.subtotal }}</div></div>
-        <div><span class="muted">Tax</span><div class="big">${{ doc.tax }}</div></div>
-        <div><span class="muted">Total</span><div class="big">${{ doc.total }}</div></div>
+      <div class="share-total">
+        <div class="muted small">Total</div>
+        <div class="big">${{ doc.total }}</div>
+        <div class="share-total-breakdown">
+          <span class="muted small">Subtotal: ${{ doc.subtotal }}</span>
+          <span class="muted small">Tax: ${{ doc.tax }}</span>
+        </div>
       </div>
     </div>
+
+    {% if jobs %}
+      <div class="share-jobs">
+        {% for j in jobs %}
+          <div class="card share-job-card">
+            <div class="share-job-top">
+              <div>
+                <div class="share-job-title">{{ j.title }}</div>
+                {% set status_class = 'pill ok' if j.status=='approved' else 'pill danger' if j.status=='declined' else 'pill' %}
+                <div class="muted small">Status: <span class="{{ status_class }}">{{ j.status }}</span></div>
+              </div>
+              <div class="share-job-total">
+                <div class="muted small">Job total</div>
+                <div class="big">${{ job_totals.get(j.id, '0.00') }}</div>
+              </div>
+            </div>
+            {% if doc.doc_type == 'estimate' %}
+              <div class="share-job-actions">
+                <form method="post" action="{{ url_for('share_job_status', token=doc.share_token, job_id=j.id) }}">
+                  <input type="hidden" name="status" value="approved">
+                  <button class="btn good small" type="submit">Approve</button>
+                </form>
+                <form method="post" action="{{ url_for('share_job_status', token=doc.share_token, job_id=j.id) }}">
+                  <input type="hidden" name="status" value="declined">
+                  <button class="btn danger small" type="submit">Decline</button>
+                </form>
+              </div>
+            {% endif %}
+            <table class="table share-items">
+              <tr><th>Description</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Amount</th></tr>
+              {% for it in items_by_job.get(j.id, []) %}
+                {% set amt = ((it.qty or 0) * (it.unit_price or 0)) %}
+                <tr>
+                  <td>
+                    <div>{{ it.description }}</div>
+                    <div class="muted">{{ it.item_type }}{% if it.labor_hours %} • {{ it.labor_hours }}h{% endif %}</div>
+                  </td>
+                  <td class="right">{{ it.qty }}</td>
+                  <td class="right">${{ it.unit_price }}</td>
+                  <td class="right">
+                    {% if it.item_type=='discount' %}
+                      -${{ (amt|abs) | round(2) }}
+                    {% else %}
+                      ${{ amt | round(2) }}
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </table>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if unassigned_items %}
+      <div class="card">
+        <div class="cardtitle">Additional items</div>
+        <table class="table share-items">
+          <tr><th>Description</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Amount</th></tr>
+          {% for it in unassigned_items %}
+            {% set amt = ((it.qty or 0) * (it.unit_price or 0)) %}
+            <tr>
+              <td>
+                <div>{{ it.description }}</div>
+                <div class="muted">{{ it.item_type }}{% if it.labor_hours %} • {{ it.labor_hours }}h{% endif %}</div>
+              </td>
+              <td class="right">{{ it.qty }}</td>
+              <td class="right">${{ it.unit_price }}</td>
+              <td class="right">
+                {% if it.item_type=='discount' %}
+                  -${{ (amt|abs) | round(2) }}
+                {% else %}
+                  ${{ amt | round(2) }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endif %}
+
+    {% if not jobs and not unassigned_items %}
+      <div class="card">
+        <div class="cardtitle">Line items</div>
+        <table class="table share-items">
+          <tr><th>Description</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Amount</th></tr>
+          {% for it in items %}
+            {% set amt = ((it.qty or 0) * (it.unit_price or 0)) %}
+            <tr>
+              <td>
+                <div>{{ it.description }}</div>
+                <div class="muted">{{ it.item_type }}{% if it.labor_hours %} • {{ it.labor_hours }}h{% endif %}</div>
+              </td>
+              <td class="right">{{ it.qty }}</td>
+              <td class="right">${{ it.unit_price }}</td>
+              <td class="right">
+                {% if it.item_type=='discount' %}
+                  -${{ (amt|abs) | round(2) }}
+                {% else %}
+                  ${{ amt | round(2) }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endif %}
   </div>
 </body>
 </html>
