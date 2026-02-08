@@ -19,6 +19,7 @@
     </div>
 
     <form method="post" id="apptForm" action="{{ url_for('calendar_create') }}">
+    <form method="post" id="apptForm">
       <input type="hidden" name="appt_id" id="appt_id">
       <div class="grid2">
         <div>
@@ -93,7 +94,7 @@ function formatForInput(date){
 }
 
 async function getEvents(info){
-  const r = await fetch(`/api/calendar/events?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`);
+  const r = await fetch(`/api/appointments?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`);
   return await r.json();
 }
 
@@ -123,6 +124,16 @@ document.addEventListener('DOMContentLoaded', async function() {
           start_at: formatForInput(data.start_at),
           end_at: formatForInput(data.end_at),
         }));
+      const data = {
+        id: info.event.id,
+        title: info.event.title,
+        ro_id: info.event.extendedProps.ro_id,
+        status: info.event.extendedProps.status,
+        notes: info.event.extendedProps.notes,
+        start_at: formatForInput(info.event.start),
+        end_at: formatForInput(info.event.end),
+      };
+      openAppt(data);
     }
   });
   cal.render();
@@ -134,6 +145,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       await fetch(`/api/calendar/appointments/${encodeURIComponent(apptId)}/update`, {method:"POST", body:form});
     }else{
       await fetch("/api/calendar/appointments", {method:"POST", body:form});
+      await fetch(`/api/appointments/${encodeURIComponent(apptId)}/update`, {method:"POST", body:form});
+    }else{
+      await fetch("/api/appointments", {method:"POST", body:form});
     }
     closeAppt();
     cal.refetchEvents();
@@ -142,6 +156,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const apptId = document.getElementById("appt_id").value;
     if(!apptId) return;
     await fetch(`/api/calendar/appointments/${encodeURIComponent(apptId)}/delete`, {method:"POST"});
+    await fetch(`/api/appointments/${encodeURIComponent(apptId)}/delete`, {method:"POST"});
     closeAppt();
     cal.refetchEvents();
   });
