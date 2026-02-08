@@ -523,12 +523,7 @@ def create_app():
             })
         return render_template("calendar.html", ro_pick=ro_pick)
 
-    @app.get("/api/appointments")
-    @login_required
-    def api_appointments():
-        # FullCalendar expects start/end ISO
-        start = request.args.get("start")
-        end = request.args.get("end")
+    def calendar_events(start=None, end=None):
         q = Appointment.query
         if start:
             try:
@@ -548,7 +543,6 @@ def create_app():
             ro = RepairOrder.query.get(a.ro_id)
             title = a.title
             if ro:
-                # Helpful label: RO# + customer + vehicle
                 cust = Customer.query.get(ro.customer_id)
                 veh = Vehicle.query.get(ro.vehicle_id)
                 parts = [f"RO #{ro.ro_number}"]
@@ -571,15 +565,42 @@ def create_app():
                     "notes": a.notes,
                 }
             })
-        return jsonify(events)
+        return events
 
-    @app.post("/api/appointments")
+    @app.get("/api/appointments")
     @login_required
-    def api_appointments_create():
+    def api_appointments():
+        start = request.args.get("start")
+        end = request.args.get("end")
+        return jsonify(calendar_events(start, end))
+
+    @app.get("/api/calendar/events")
+    @login_required
+    def api_calendar_events():
+        start = request.args.get("start")
+        end = request.args.get("end")
+        return jsonify(calendar_events(start, end))
+
+    @app.get("/api/calendar/event/<string:appt_id>")
+    @login_required
+    def api_calendar_event(appt_id):
+        appt = Appointment.query.get_or_404(appt_id)
+        return jsonify({
+            "id": appt.id,
+            "title": appt.title,
+            "ro_id": appt.ro_id,
+            "start_at": appt.start_at.isoformat(),
+            "end_at": appt.end_at.isoformat(),
+            "status": appt.status,
+            "notes": appt.notes,
+        })
+
+    def create_appointment_from_form():
         ro_id = (request.form.get("ro_id") or "").strip()
         title = (request.form.get("title") or "").strip() or "Appointment"
         start_at = (request.form.get("start_at") or "").strip()
         end_at = (request.form.get("end_at") or "").strip()
+        status = (request.form.get("status") or "").strip() or "scheduled"
         notes = (request.form.get("notes") or "").strip() or None
 
         if not ro_id:
@@ -598,17 +619,27 @@ def create_app():
             title=title,
             start_at=sdt,
             end_at=edt,
-            status="scheduled",
+            status=status,
             notes=notes,
             created_at=datetime.utcnow(),
         )
         db.session.add(appt)
         db.session.commit()
+        return appt
+
+    @app.post("/api/appointments")
+    @login_required
+    def api_appointments_create():
+        appt = create_appointment_from_form()
         return {"ok": True, "id": appt.id}
 
-    @app.post("/api/appointments/<string:appt_id>/update")
+    @app.post("/api/calendar/appointments")
     @login_required
-    def api_appointments_update(appt_id):
+    def api_calendar_appointments_create():
+        appt = create_appointment_from_form()
+        return {"ok": True, "id": appt.id}
+
+    def update_appointment_from_form(appt_id):
         appt = Appointment.query.get_or_404(appt_id)
         title = (request.form.get("title") or "").strip()
         start_at = (request.form.get("start_at") or "").strip()
@@ -626,15 +657,35 @@ def create_app():
         appt.notes = notes
         db.session.add(appt)
         db.session.commit()
+        return appt
+
+    @app.post("/api/appointments/<string:appt_id>/update")
+    @login_required
+    def api_appointments_update(appt_id):
+        update_appointment_from_form(appt_id)
+        return {"ok": True}
+
+    @app.post("/api/calendar/appointments/<string:appt_id>/update")
+    @login_required
+    def api_calendar_appointments_update(appt_id):
+        update_appointment_from_form(appt_id)
+        return {"ok": True}
+
+    def delete_appointment(appt_id):
+        appt = Appointment.query.get_or_404(appt_id)
+        db.session.delete(appt)
+        db.session.commit()
         return {"ok": True}
 
     @app.post("/api/appointments/<string:appt_id>/delete")
     @login_required
     def api_appointments_delete(appt_id):
-        appt = Appointment.query.get_or_404(appt_id)
-        db.session.delete(appt)
-        db.session.commit()
-        return {"ok": True}
+        return delete_appointment(appt_id)
+
+    @app.post("/api/calendar/appointments/<string:appt_id>/delete")
+    @login_required
+    def api_calendar_appointments_delete(appt_id):
+        return delete_appointment(appt_id)
 
     # ---------- RO list ----------
     @app.get("/ros")

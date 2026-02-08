@@ -258,6 +258,24 @@ label{font-size:12px;color:var(--muted);display:block;margin:8px 0 6px}
   align-items:flex-start;
   justify-content:space-between;
   flex-wrap:wrap;
+  flex-direction:column;
+}
+.share-meta{display:flex;flex-direction:column;gap:8px}
+.share-info{display:flex;flex-direction:column;gap:4px}
+.share-top-bubble{
+  border:1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.02);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.share-cta-bar{
+  width:100%;
+  border:1px dashed rgba(255,255,255,.12);
+  border-radius: 12px;
+  padding: 10px 14px;
 }
 .share-meta{display:flex;flex-direction:column;gap:8px}
 .share-info{display:flex;flex-direction:column;gap:4px}
@@ -277,6 +295,13 @@ label{font-size:12px;color:var(--muted);display:block;margin:8px 0 6px}
   background: rgba(255,255,255,.02);
 }
 .share-total-breakdown{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.share-jobs{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  max-width: 920px;
+  margin: 0 auto;
+}
 .share-jobs{display:flex;flex-direction:column;gap:14px}
 .share-job-card{padding: 16px}
 .share-job-top{
@@ -290,6 +315,12 @@ label{font-size:12px;color:var(--muted);display:block;margin:8px 0 6px}
 .share-job-title{font-size:18px;font-weight:700}
 .share-job-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .share-items{margin-top:4px}
+.share-totals{
+  margin-top:18px;
+  max-width: 920px;
+  margin-left:auto;
+  margin-right:auto;
+}
 .share-totals{margin-top:18px}
 
 .jobhead{

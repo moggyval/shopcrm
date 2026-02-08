@@ -17,6 +17,7 @@
 
   <div class="container">
     <div class="card share-hero">
+      <div class="share-top-bubble">
       <div class="share-meta">
         <div class="pill">Status: {{ doc.status }}</div>
         <h2>{{ doc.doc_type|capitalize }} (v{{ doc.version }})</h2>
@@ -24,6 +25,11 @@
           <span class="muted small">RO #{{ ro.ro_number }}</span>
           <span class="muted small">{{ customer.name }}</span>
           <span class="muted small">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }} {{ vehicle.engine }}</span>
+        </div>
+      </div>
+      <div class="share-cta-bar">
+        <div class="muted small">Review each job and approve or decline.</div>
+      </div>
         </div>
       </div>
       <div class="share-cta">
@@ -121,6 +127,34 @@
         </table>
       </div>
     {% endif %}
+
+    {% if not jobs and not unassigned_items %}
+      <div class="card">
+        <div class="cardtitle">Line items</div>
+        <table class="table share-items">
+          <tr><th>Description</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Amount</th></tr>
+          {% for it in items %}
+            {% set amt = ((it.qty or 0) * (it.unit_price or 0)) %}
+            <tr>
+              <td>
+                <div>{{ it.description }}</div>
+                <div class="muted">{{ it.item_type }}{% if it.labor_hours %} • {{ it.labor_hours }}h{% endif %}</div>
+              </td>
+              <td class="right">{{ it.qty }}</td>
+              <td class="right">${{ it.unit_price }}</td>
+              <td class="right">
+                {% if it.item_type=='discount' %}
+                  -${{ (amt|abs) | round(2) }}
+                {% else %}
+                  ${{ amt | round(2) }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endif %}
+
 
     {% if not jobs and not unassigned_items %}
       <div class="card">
